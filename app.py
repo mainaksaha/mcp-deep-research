@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from fastmcp.server import FastMCP
 from pydantic import BaseModel
@@ -71,10 +72,17 @@ def create_server():
     return mcp
 
 
+# Build the ASGI app and mount it at /mcp
+server = create_server()
+app = server.http_app(             # Streamable-HTTP transport
+    path="/mcp",                   # mount point
+    transport="streamable-http"    # new recommended HTTP transport
+)
+
+# Only needed if you ever run `python server.py` locally:
 if __name__ == "__main__":
-    create_server().run(
-        transport="streamable-http",   # <— use streamable‑http, not "http"
-        host="127.0.0.1",
-        port=8000,
-        path="/mcp",                   # make sure this matches your client URL
-    )
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("server:app", host="0.0.0.0", port=port)
+
+
