@@ -72,4 +72,9 @@ def create_server():
 
 
 if __name__ == "__main__":
-    create_server().run(transport="sse", host="127.0.0.1")
+    create_server().run(
+        transport="streamable-http",   # <— use streamable‑http, not "http"
+        host="127.0.0.1",
+        port=8000,
+        path="/mcp",                   # make sure this matches your client URL
+    )
