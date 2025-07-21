@@ -1,88 +1,55 @@
 import json
 import os
 from pathlib import Path
-from fastmcp.server import FastMCP
-from pydantic import BaseModel
+from flask import Flask, jsonify, request
 
+# Load cupcake order records
 RECORDS = json.loads(Path(__file__).with_name("records.json").read_text())
 LOOKUP = {r["id"]: r for r in RECORDS}
 
-class SearchResult(BaseModel):
-    id: str
-    title: str
-    text: str
+app = Flask(__name__)
 
-class SearchResultPage(BaseModel):
-    results: list[SearchResult]
+@app.route("/")
+def index():
+    """Simple index route to verify the API is running."""
+    return jsonify({"message": "Cupcake MCP API"})
 
-class FetchResult(BaseModel):
-    id: str
-    title: str
-    text: str
-    url: str | None = None
-    metadata: dict[str, str] | None = None
+@app.route("/search", methods=["POST"])
+def search():
+    """Search for cupcake orders by keyword."""
+    data = request.get_json(silent=True) or {}
+    query = data.get("query", "")
+    tokens = query.lower().split()
+    results = []
+    for r in RECORDS:
+        hay = " ".join([
+            r.get("title", ""),
+            r.get("text", ""),
+            " ".join(r.get("metadata", {}).values()),
+        ]).lower()
+        if any(t in hay for t in tokens):
+            results.append({
+                "id": r["id"],
+                "title": r.get("title", ""),
+                "text": r.get("text", ""),
+            })
+    return jsonify({"results": results})
 
-def create_server():
-    mcp = FastMCP(name="Cupcake MCP", instructions="Search cupcake orders")
+@app.route("/fetch/<id>")
+def fetch(id: str):
+    """Fetch a cupcake order by ID."""
+    if id not in LOOKUP:
+        return jsonify({"error": "unknown id"}), 404
+    r = LOOKUP[id]
+    result = {
+        "id": r["id"],
+        "title": r.get("title", ""),
+        "text": r.get("text", ""),
+        "url": r.get("url"),
+        "metadata": r.get("metadata"),
+    }
+    return jsonify(result)
 
-    @mcp.tool()
-    async def search(query: str) -> SearchResultPage:
-        """
-        Search for cupcake orders – keyword match.
-
-        Returns a SearchResultPage containing a list of SearchResult items.
-        """
-        toks = query.lower().split()
-        results: list[SearchResult] = []
-        for r in RECORDS:
-            hay = " ".join(
-                [
-                    r.get("title", ""),
-                    r.get("text", ""),
-                    " ".join(r.get("metadata", {}).values()),
-                ]
-            ).lower()
-            if any(t in hay for t in toks):
-                results.append(
-                    SearchResult(id=r["id"], title=r.get("title", ""), text=r.get("text", ""))
-                )
-
-        # Return the Pydantic model (FastMCP will serialise it for us)
-        return SearchResultPage(results=results)
-
-    @mcp.tool()
-    async def fetch(id: str) -> FetchResult:
-        """
-        Fetch a cupcake order by ID.
-
-        Returns a FetchResult model.
-        """
-        if id not in LOOKUP:
-            raise ValueError("unknown id")
-
-        r = LOOKUP[id]
-        return FetchResult(
-            id=r["id"],
-            title=r.get("title", ""),
-            text=r.get("text", ""),
-            url=r.get("url"),
-            metadata=r.get("metadata"),
-        )
-
-    return mcp
-
-
-# Build the ASGI app and mount it at /mcp
-server = create_server()
-app = server.http_app(             # Streamable-HTTP transport
-    path="/mcp",                   # mount point
-    transport="streamable-http"    # new recommended HTTP transport
-)
-
-# Only needed if you ever run `python server.py` locally:
 if __name__ == "__main__":
-    import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("server:app", host="0.0.0.0", port=port)
-
-
+    app.run(host="0.0.0.0", port=port)
