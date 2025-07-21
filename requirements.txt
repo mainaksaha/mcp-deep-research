@@ -30,5 +30,4 @@ typing_extensions==4.14.0
 uvicorn==0.34.3
 websockets==15.0.1
 gunicorn
-Flask==3.1.0
 
